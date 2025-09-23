@@ -1,0 +1,43 @@
+---
+- name: Docker Swarm Worker Setup
+  hosts: worker_nodes
+  become: yes
+  vars:
+    # 매니저 노드의 IP 주소와 'docker swarm init' 명령으로 얻은 토큰을 여기에 입력하세요.
+    manager_ip: "192.168.1.100"
+    join_token: "SWMTKN-1-49t9u...c24y"
+  tasks:
+    - name: Install Docker and Docker Compose
+      ansible.builtin.apk:
+        name:
+          - docker
+          - docker-compose
+        state: present
+
+    - name: Ensure Docker service is running and enabled on boot
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Add 'pi' user to 'docker' group
+      ansible.builtin.user:
+        name: pi
+        groups: docker
+        append: yes
+
+    - name: Join Docker Swarm as a worker
+      community.docker.docker_swarm:
+        state: join
+        join_token: "{{ join_token }}"
+        manager_host: "{{ manager_ip }}"
+        listen_addr: "{{ ansible_host }}"
+
+    - name: Create /etc/docker/daemon.json for live-restore
+      ansible.builtin.copy:
+        content: |
+          {
+            "live-restore": true
+          }
+        dest: /etc/docker/daemon.json
+        mode: "0644"
