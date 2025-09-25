@@ -1,0 +1,14 @@
+---
+- name: Install Docker and required packages
+  ansible.builtin.package:
+    name:
+      - docker
+      - openrc # 서비스 관리를 위해 포함
+    state: present
+    update_cache: yes # 'apk update'를 먼저 실행
+
+- name: Enable and start the Docker service
+  ansible.builtin.service:
+    name: docker
+    enabled: yes   # 부팅 시 자동 시작 (rc-update add docker boot)
+    state: started # 즉시 서비스 시작 (service docker start)

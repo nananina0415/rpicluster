@@ -1,13 +1,79 @@
-# /cluster_setup/playbook.yml
 ---
-- name: Setup Cluster User Management
-  hosts: all
-  become: yes      # root 권한으로 실행
-
-  # 사용할 변수 파일 지정
+# ===================================================================
+# PLAY 0: 동적 인벤토리 생성
+# ===================================================================
+- name: 0. Create Dynamic Inventory from cluster_config.yml
+  hosts: localhost
+  gather_facts: false
   vars_files:
     - cluster_config.yml
+  tasks:
+    - name: Add machines to role-specific groups
+      ansible.builtin.add_host:
+        name: "{{ item.name }}"
+        ansible_host: "{{ item.ip }}"
+        groups: "{{ 'swarm_' + item.role }}" # 'swarm_manager' 또는 'swarm_workers'
+      loop: "{{ machines }}"
 
-  # 실행할 역할 지정
-  roles:
-    - role: cluster_managers
+    - name: Create 'cluster' group by adding all member hosts
+      # swarm_manager와 swarm_workers 그룹의 모든 호스트 목록을 합쳐서 반복
+      loop: "{{ groups['swarm_manager'] + groups['swarm_workers'] }}"
+      ansible.builtin.add_host:
+        name: "{{ item }}"      # 루프의 현재 호스트 이름 (예: rpi0, rpi2)
+        groups: cluster       # 이 호스트를 'cluster' 그룹에 추가
+      changed_when: false
+
+# ===================================================================
+# PLAY 1: 모든 머신에 파이썬 설치
+# ===================================================================
+- name: Bootstrap Python on all nodes
+  hosts: cluster
+  become: yes
+  gather_facts: false # 파이썬이 없어도 실행되도록 fact 수집을 건너뜀
+  tasks:
+    - name: Install python3 using raw command
+      ansible.builtin.raw: apk add --no-cache python3 # 파이썬 없이도 작동하는 raw 모듈 사용
+      changed_when: true
+      register: python_install_result
+
+# ===================================================================
+# PLAY 2: 머신 및 오케스트레이션 레이어 설정
+# ===================================================================
+- name: Setup Machine and Orchestration Layers
+  hosts: cluster
+  become: yes
+  vars_files:
+    - cluster_config.yml
+  tasks:
+    # --- Layer 1: Machine Layer ---
+    - name: 1.1 Include User Setup Tasks
+      ansible.builtin.import_tasks: playbooks/machine_layer/cluster_managers.yml
+
+    - name: 1.2 Include Docker Setup Tasks
+      ansible.builtin.import_tasks: playbooks/machine_layer/docker_setup.yml
+
+    # --- Layer 2: Orchestration Layer ---
+    - name: 2.1 Include Swarm Manager Setup (on manager only)
+      ansible.builtin.import_tasks: playbooks/orchestration_layer/manager_node.yml
+      when: inventory_hostname in groups['swarm_manager']
+
+    - name: 2.2 Include Swarm Worker Setup (on workers only)
+      ansible.builtin.import_tasks: playbooks/orchestration_layer/worker_node.yml
+      when: inventory_hostname in groups['swarm_workers']
+
+# ===================================================================
+# PLAY 3: 매니저 노드에서 컨테이너 레이어(서비스) 배포
+# ===================================================================
+- name: Deploy Application Container Layer
+  hosts: swarm_manager # 서비스 배포는 반드시 매니저 노드에서만 실행
+  become: yes
+  vars_files:
+    - cluster_config.yml
+  tasks:
+    # --- Layer 3: Container Layer ---
+    - name: 3.1 Include Runner Service Deployment
+      ansible.builtin.import_tasks: playbooks/container_layer/runner.yml
+    
+    - name: 3.2 Include Storage Service Deployment
+      ansible.builtin.import_tasks: playbooks/container_layer/storage.yml
+    # ... 다른 컨테이너 import ...

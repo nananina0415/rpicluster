@@ -1,81 +1,61 @@
 ---
-- name: 클러스터 관리자 계정/그룹 설정
-  hosts: localhost
-  become: yes
-  vars_files:
-    - ../cluster_config.yml
+- name: Notify about default admin creation
+  ansible.builtin.debug:
+    msg: "⚠️ 'cluster_managers' list is empty. Creating default cluster manager 'cm'."
+  when: cluster_managers | default([]) | length == 0
+
+- name: Determine the list of managers to create
+  ansible.builtin.set_fact:
+    managers: "{{ cluster_managers if (cluster_managers is defined and cluster_managers | length > 0) else ['cm'] }}"
+
+- name: Ensure 'cluster_managers' group exists
+  ansible.builtin.group:
+    name: cluster_managers
+    state: present
+
+- name: Ensure all manager users exist
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: present
+    shell: /bin/ash
+  loop: "{{ managers }}"
+  register: user_creation_results
+
+- name: Set password for new users only
   vars:
-    cluster_managers: "{{ cluster_managers | default([]) }}"
+    current_user: "{{ item.item }}"
+  block:
+    - name: "Prompt for password for new user: {{ item.item }}"
+      ansible.builtin.pause:
+        prompt: "Enter password for new user '{{ current_user }}'"
+        echo: no
+      register: password_prompt
 
-  tasks:
-    - name: Notify about default admin creation
-      ansible.builtin.debug:
-        msg: "⚠️ 'cluster_managers' list is empty. Creating default cluster manager 'cm'."
-      when: cluster_managers | length == 0
-    
-    - name: Determine the list of admin users to manage
-      ansible.builtin.set_fact:
-        cluster_managers: "{{ cluster_managers if (cluster_managers | length > 0) else ['cm'] }}"
-    
-    - name: Ensure cluster_managers group exists
-      ansible.builtin.group:
-        name: cluster_managers
-        state: present
-
-    - name: Ensure all admin users exist
+    - name: Set user password
       ansible.builtin.user:
-        name: "{{ item }}"
-        state: present
-        shell: /bin/ash
-      loop: "{{ cluster_managers }}"
-      register: user_creation_results
+        name: "{{ current_user }}"
+        password: "{{ password_prompt.user_input | password_hash('sha512') }}"
+  loop: "{{ user_creation_results.results }}"
+  when: item.changed
 
-    - name: Set password for new users only
-      vars:
-        # item.item = loop의 원래 값(사용자 이름)
-        current_user: "{{ item.item }}"
-      block:
-        - name: Prompt for password for new user
-          ansible.builtin.pause:
-            prompt: "Enter password for new user '{{ current_user }}'"
-            echo: no # 터미널에 입력값이 보이지 않도록 설정
-          register: password_prompt
+- name: Add manager users to the 'docker' group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: yes
+  loop: "{{ managers }}"
 
-        - name: Set user password
-          ansible.builtin.user:
-            name: "{{ current_user }}"
-            password: "{{ password_prompt.user_input | password_hash('sha512') }}"
-      loop: "{{ user_creation_results.results }}"
-      when: item.changed
+- name: Ensure only specified users are in 'cluster_managers' group
+  ansible.builtin.group:
+    name: cluster_managers
+    state: present
+    members: "{{ managers }}"
 
-    - name: Ensure docker group exists
-      ansible.builtin.group:
-        name: docker
-        state: present
-
-    # 'cluster_managers' 그룹의 사용자들을 'docker' 그룹에 추가
-    # append: yes 옵션을 사용해 기존 docker 그룹 멤버를 유지하면서 추가
-    - name: Add cluster admins to the docker group
-      ansible.builtin.group:
-        name: docker
-        state: present
-        members: "{{ cluster_managers }}"
-        append: yes
-
-    # 'members' 옵션은 리스트에 없는 사용자를 그룹에서 자동으로 제거
-    # 그룹에서 제거할뿐 유저를 제거하지는 않음
-    - name: Ensure only specified users are in cluster_managers group
-      ansible.builtin.group:
-        name: cluster_managers
-        state: present
-        members: "{{ cluster_managers }}"
-
-    # 클러스터 구성 폴더 권한 설정
-    - name: Set permissions for the cluster_setup directory
-      ansible.builtin.file:
-        path: /cluster_setup
-        state: directory
-        owner: "{{ cluster_managers | first }}"
-        group: cluster_managers
-        mode: '0770'
-        recurse: yes # 하위 모든 파일 및 디렉터리에 동일한 권한을 재귀적으로 적용
+- name: Set permissions for the cluster_setup directory
+  ansible.builtin.file:
+    path: /cluster_setup
+    state: directory
+    owner: "{{ managers | first }}"
+    group: cluster_managers
+    mode: '0770'
+    recurse: yes
