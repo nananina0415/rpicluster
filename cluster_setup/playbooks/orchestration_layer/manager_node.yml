@@ -1,0 +1,20 @@
+---
+- name: Initialize Docker Swarm
+  # advertise-addr는 다른 노드들이 매니저에게 연락할 주소를 알려주는 옵션
+  ansible.builtin.command: docker swarm init --advertise-addr {{ ansible_host }}
+  register: swarm_init_result
+  # 멱등성 보장 - 이미 초기화된 상태에서 다시 실행해도 'changed'가 되지 않고 에러도 발생하지 않도록 처리
+  changed_when: "'Swarm initialized' in swarm_init_result.stdout"
+  failed_when: "swarm_init_result.rc != 0 and 'already part of a swarm' not in swarm_init_result.stderr"
+
+- name: Get the worker join token
+  # 워커 노드들이 클러스터에 참여할 때 사용할 비밀 토큰을 조회
+  ansible.builtin.command: docker swarm join-token -q worker
+  register: worker_join_token
+  changed_when: false # 조회 명령어는 상태를 변경하지 않음
+
+- name: Set worker token as a fact
+  # 조회한 토큰을 다른 호스트(워커 노드)에서 사용할 수 있도록 변수로 저장
+  # 이 'fact'는 ansible-playbook 실행 중에만 메모리에 저장됨
+  ansible.builtin.set_fact:
+    swarm_worker_token: "{{ worker_join_token.stdout }}"

@@ -1,0 +1,11 @@
+---
+- name: Join the Swarm cluster as a worker
+  # `hostvars`를 사용해 매니저 노드가 저장해 둔 'swarm_worker_token' 변수를 가져옴
+  ansible.builtin.command: >
+    docker swarm join
+    --token {{ hostvars[groups['swarm_manager'][0]]['swarm_worker_token'] }}
+    {{ hostvars[groups['swarm_manager'][0]]['ansible_host'] }}:2377
+  register: swarm_join_result
+  # 멱등성 보장: 이미 클러스터에 참여한 노드에서 다시 실행해도 문제없도록 처리
+  changed_when: "'This node joined a swarm' in swarm_join_result.stdout"
+  failed_when: "swarm_join_result.rc != 0 and 'already part of a swarm' not in swarm_join_result.stderr"
