@@ -1,0 +1,28 @@
+# Dockerfile
+
+# ===================================================================
+# 1단계: 빌더(Builder) 스테이지
+# ===================================================================
+FROM alpine:latest AS builder
+
+# ✅ Bun 설치를 위해 bash, curl 등 안정적인 도구를 설치합니다.
+# 이 패키지들은 최종 이미지에 포함되지 않습니다.
+RUN apk add --no-cache bash curl unzip ca-certificates
+
+# ✅ bash를 사용하여 설치 스크립트를 실행합니다.
+RUN curl -fsSL https://bun.sh/install | bash
+
+
+# ===================================================================
+# 2단계: 최종(Final) 스테이지
+# ===================================================================
+FROM alpine:latest
+
+# Bun 실행에 필요한 최소한의 런타임 의존성만 설치합니다.
+RUN apk add --no-cache ca-certificates
+
+# builder 단계에서 설치한 bun 실행 파일만 최종 이미지로 복사해옵니다.
+COPY --from=builder /root/.bun/bin/bun /usr/local/bin/
+
+# 컨테이너가 시작될 때 실행할 기본 명령어
+CMD ["bun", "-e", "serve({ port: 3000, fetch: () => new Response('Hello from a Robust Multi-Stage Bun Image!') })"]
