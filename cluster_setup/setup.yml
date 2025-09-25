@@ -1,0 +1,13 @@
+# /cluster_setup/playbook.yml
+---
+- name: Setup Cluster User Management
+  hosts: all
+  become: yes      # root 권한으로 실행
+
+  # 사용할 변수 파일 지정
+  vars_files:
+    - cluster_config.yml
+
+  # 실행할 역할 지정
+  roles:
+    - role: cluster_managers

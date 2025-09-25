@@ -1,0 +1,23 @@
+cluster_managers:
+  - cm
+  
+machines:
+  - name: rpi0
+    ip: 192.168.1.100
+    role: manager
+    containers:
+      - runningmate
+      - service
+  - name: rpi2
+    ip: 192.168.1.101
+    role: worker
+    containers:
+      - storage
+      - task_queue
+  - name: rpi3
+    ip: 192.168.1.102
+    role: worker
+    containers:
+      - runner
+      
+    
