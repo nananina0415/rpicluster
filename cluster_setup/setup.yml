@@ -70,10 +70,5 @@
   vars_files:
     - cluster_config.yml
   tasks:
-    # --- Layer 3: Container Layer ---
-    - name: 3.1 Include Runner Service Deployment
-      ansible.builtin.import_tasks: playbooks/container_layer/runner.yml
-    
-    - name: 3.2 Include Storage Service Deployment
-      ansible.builtin.import_tasks: playbooks/container_layer/storage.yml
-    # ... 다른 컨테이너 import ...
+  - name: 3.1 Deploy containers to each machines
+    ansible.builtin.import_tasks: playbooks/container_layer/common.yml

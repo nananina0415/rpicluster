@@ -1,0 +1,16 @@
+---
+- name: Deploy all specified services to their designated nodes
+  community.docker.docker_service:
+    name: "{{ item.1 }}" # 컨테이너 이름
+    image: "nananina0415/rpicluster-{{ item.1 }}:latest"
+    state: present
+    placement:
+      constraints:
+        - "node.hostname == {{ item.0.name }}" # 머신 이름
+  
+  # `with_subelements` 루프를 사용하여 중첩된 목록을 순회
+  # 1. (`item.0`) machines 리스트를 순회하고
+  # 2. (`item.1`) 각 machine의 `containers` 리스트를 다시 순회
+  with_subelements:
+    - "{{ machines }}"
+    - containers
