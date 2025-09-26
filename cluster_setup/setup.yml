@@ -72,3 +72,23 @@
   tasks:
   - name: 3.1 Deploy containers to each machines
     ansible.builtin.import_tasks: playbooks/container_layer/common.yml
+
+# ===================================================================
+# PLAY 4: 컨트롤 노드의 폴더 권한 설정
+# ===================================================================
+- name: 4. Set Permissions on the Control Node
+  hosts: localhost # localhost에서만 실행
+  become: yes
+  vars_files:
+    - cluster_config.yml
+  vars:
+    owner_user: "{{ (cluster_managers | default(['cm']))[0] }}"
+  tasks:
+    - name: Set permissions for the local cluster_setup directory
+      ansible.builtin.file:
+        path: .
+        state: directory
+        owner: "{{ owner_user }}"
+        group: cluster_managers # 이 그룹은 이미 모든 노드에 생성되어 있음
+        mode: '0770'
+        recurse: yes

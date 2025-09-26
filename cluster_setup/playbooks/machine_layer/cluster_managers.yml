@@ -50,12 +50,3 @@
     name: cluster_managers
     state: present
     members: "{{ managers }}"
-
-- name: Set permissions for the cluster_setup directory
-  ansible.builtin.file:
-    path: /cluster_setup
-    state: directory
-    owner: "{{ managers | first }}"
-    group: cluster_managers
-    mode: '0770'
-    recurse: yes
